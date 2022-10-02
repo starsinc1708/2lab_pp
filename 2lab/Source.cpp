@@ -1,4 +1,4 @@
-#include <omp.h>
+ï»¿#include <omp.h>
 #include "stdio.h"
 #include <math.h>
 #include <stdio.h>
@@ -8,9 +8,9 @@
 
 #define CHUNK 100
 #define NMAX 15000000
-#define MPI
-#define Collect
-//#define Q
+#define OpenMP
+#define Reduction
+#define Q
 int NumOfThreads = 8;
 
 double reduction(int* a, double sum, int i, int q) {
@@ -95,7 +95,6 @@ int main(int argc, char** argv) {
 }
 #endif // OpenMp
 
-
 #ifdef Seq
 int main(int argc, char** argv) {
 
@@ -176,13 +175,13 @@ int main(int argc, char** argv)
         TotalSum = ProcSum;
         for (i = 1; i < ProcNum; i++)
         {
-            // Ïîëó÷åíèå ëîê. ñóìì îò äðóãèõ ïðîöåññîâ
+            // ÐŸÐ¾Ð»ÑƒÑ‡ÐµÐ½Ð¸Ðµ Ð»Ð¾Ðº. ÑÑƒÐ¼Ð¼ Ð¾Ñ‚ Ð´Ñ€ÑƒÐ³Ð¸Ñ… Ð¿Ñ€Ð¾Ñ†ÐµÑÑÐ¾Ð²
             MPI_Recv(&ProcSum, 1, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, &Status);
             TotalSum = TotalSum + ProcSum;
         }
     }
     else
-        MPI_Send(&ProcSum, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD); // Ëîêàëüíûå ñóììû îòïðàâëÿþòñÿ íóëåâîìó ïðîöåññó
+        MPI_Send(&ProcSum, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD); // Ð›Ð¾ÐºÐ°Ð»ÑŒÐ½Ñ‹Ðµ ÑÑƒÐ¼Ð¼Ñ‹ Ð¾Ñ‚Ð¿Ñ€Ð°Ð²Ð»ÑÑŽÑ‚ÑÑ Ð½ÑƒÐ»ÐµÐ²Ð¾Ð¼Ñƒ Ð¿Ñ€Ð¾Ñ†ÐµÑÑÑƒ
 #endif // Point
 
 #ifdef Collect
