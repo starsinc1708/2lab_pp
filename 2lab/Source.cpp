@@ -4,37 +4,50 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "mpi.h"
-#define CHUNK 100
-#define NMAX 254000
-#define OpenMP
-#define Reduction
+#include <chrono>
 
-double reduction(int* a, double sum, int i) {
+#define CHUNK 100
+#define NMAX 15000000
+#define MPI
+#define Collect
+//#define Q
+int NumOfThreads = 8;
+
+double reduction(int* a, double sum, int i, int q) {
 #pragma omp parallel for shared(a) private(i) reduction(+: sum)
     for (i = 0; i < NMAX; i++)
     {
+#ifdef Q
+        for (int j = 0; j < q; j++)
+#endif // Q
         sum = sum + a[i];
     }
     return sum;
 }
 
-double critial(int* a, double sum, int i) {
+double critial(int* a, double sum, int i, int q) {
 #pragma omp parallel for
     for (i = 0; i < NMAX; i++)
     {
 #pragma omp critical
         {
+#ifdef Q
+            for (int j = 0; j < q; j++)
+#endif // Q
             sum = sum + a[i];
         }
     }
     return sum;
 }
 
-double atomic(int* a, double sum, int i) {
+double atomic(int* a, double sum, int i, int q) {
 #pragma omp parallel for
     for (i = 0; i < NMAX; i++)
     {
 #pragma omp atomic
+#ifdef Q
+        for (int j = 0; j < q; j++)
+#endif // Q
         sum += a[i];
     }
     return sum;
@@ -42,39 +55,77 @@ double atomic(int* a, double sum, int i) {
 
 #ifdef OpenMP
 int main(int argc, char** argv) {
-    omp_set_num_threads(2);
+    omp_set_num_threads(NumOfThreads);
     int i = 0;
-    int a[NMAX];
-    double sum;
+    int* a = new int[NMAX];
+    double sum = 0;
+    int C = 12;
+    int q = 22;
 
     for (int i = 0; i < NMAX; i++) {
         a[i] = 1;
     }
 
-    double st_time, end_time;
-    st_time = omp_get_wtime();
-    for (int i = 0; i < 22; i++)
+    double st_time, end_time, end_time_middle = 0;
+    for (int i = 0; i < C; i++)
     {
-        sum = 0;
+        st_time = omp_get_wtime();
 #ifdef Reduction
-        sum = reduction(a, sum, i);
+        sum = reduction(a, sum, i, q);
 #endif // Rduction
 #ifdef Critical
-        sum = critial(a, sum, i);
+        sum = critial(a, sum, i, q);
 #endif // Critical
 #ifdef Atomic
-        sum = atomic(a, sum, i);
+        sum = atomic(a, sum, i, q);
 #endif // Atomic
+        end_time = omp_get_wtime();
+        end_time_middle += end_time - st_time;
+
     }
-    end_time = omp_get_wtime();
-    end_time = end_time - st_time;
-    printf("Total Sum = %10.2f", sum);
-    printf("\nTIME OF WORK IS %f ", end_time);
+    end_time_middle /= C;
+
+#ifdef Q
+    sum /= q;
+#endif // !Q
+
+    printf("Total Sum = %10.2f", sum / C);
+    printf("\nTIME OF WORK IS %f ", end_time_middle);
     return 0;
 }
 #endif // OpenMp
 
 
+#ifdef Seq
+int main(int argc, char** argv) {
+
+    int i = 0;
+    int* a = new int[NMAX];
+    double sum = 0;
+    int C = 12;
+    int q = 22;
+
+    for (int i = 0; i < NMAX; i++) {
+        a[i] = 1;
+    }
+
+    clock_t tStart = clock();
+
+    for (int i = 0; i < C; i++)
+    {
+        for (int j = 0; j < NMAX; j++)
+        {
+           //for (int k = 0; k < q; k++)
+                sum += a[i];
+        }
+    }
+
+    printf("Total Sum = %10.2f", sum);
+
+    printf("\nTime taken: %.7fs\n", (double)(clock() - tStart) / (CLOCKS_PER_SEC * C));
+    return 0;
+}
+#endif // Seq
 
 #ifdef MPI
 int main(int argc, char** argv)
@@ -82,7 +133,7 @@ int main(int argc, char** argv)
     double* x = 0;
     double TotalSum = 0.0;
     double ProcSum = 0.0;
-    int ProcRank, ProcNum, N = 254000, i;
+    int ProcRank, ProcNum, N = 15000000, i;
 
     MPI_Status Status;
 
@@ -111,7 +162,11 @@ int main(int argc, char** argv)
 
     st_time = MPI_Wtime();
 
-    for (i = 0; i < k; i++) ProcSum += loc[i];
+    for (i = 0; i < k; i++) {
+        //for(int j = 0; j < 22; j++)
+            ProcSum += loc[i];
+    }
+    //ProcSum /= 22;
     free(loc);
 
 #ifdef Point
@@ -129,6 +184,7 @@ int main(int argc, char** argv)
     else
         MPI_Send(&ProcSum, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD); // Ћокальные суммы отправл€ютс€ нулевому процессу
 #endif // Point
+
 #ifdef Collect
     if (ProcRank == 0) printf("Collective operations\n");
     MPI_Reduce(&ProcSum, &TotalSum, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
